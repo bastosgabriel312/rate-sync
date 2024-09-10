@@ -9,7 +9,7 @@ app = FastAPI()
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://rate-sync-ionic.vercel.app"],
+    allow_origins=["https://ratesync.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
