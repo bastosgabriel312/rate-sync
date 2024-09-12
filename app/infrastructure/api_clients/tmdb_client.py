@@ -3,7 +3,7 @@
 from tmdbv3api import TMDb, Movie, Search
 from app.core.config import settings
 from app.domain.repositories.movie_api_client import MovieAPIClient
-from typing import Dict, Any, List
+from typing import Any
 
 
 class TMDBClient(MovieAPIClient):
@@ -13,7 +13,7 @@ class TMDBClient(MovieAPIClient):
         self.search = Search()
         self.movie = Movie()
 
-    async def get_movie_rating(self, movie_title: str) -> Dict[str, Any]:
+    async def get_movie_rating(self, movie_title: str) -> dict[str, any]:
         try:
             search = self.search.movies(movie_title)
             if search:
@@ -38,7 +38,7 @@ class TMDBClient(MovieAPIClient):
         except Exception as e:
             return {"error": str(e)}
 
-    async def find_more_populars(self) -> list[dict[str, Any]] | dict[str, str] | dict[str, str]:
+    async def find_more_populars(self) -> list[dict[str, Any]]| dict[str:str]:
         try:
             popular = self.movie.popular()
             populars = []

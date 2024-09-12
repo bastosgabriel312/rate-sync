@@ -64,7 +64,6 @@ async def websocket_find_movie(websocket: WebSocket):
             movie_title = await websocket.receive_text()
             try:
                 movie = await find_movie_use_case.execute(movie_title)
-                print("Dados retornados pela função de busca:", movie)
                 await websocket.send_json(jsonable_encoder(movie))
             except Exception as e:
                 if websocket.client_state == WebSocketState.CONNECTED:

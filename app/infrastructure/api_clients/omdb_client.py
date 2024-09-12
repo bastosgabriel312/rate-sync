@@ -10,7 +10,7 @@ class OMDBClient(MovieAPIClient):
         self.api_key = settings.OMDB_API_KEY
         self.base_url = "http://www.omdbapi.com/"
 
-    async def get_movie_rating(self, movie_title: str) -> list[dict] | dict[str, str] | dict[str, str]:
+    async def get_movie_rating(self, movie_title: str) -> list[dict] | dict[str, str]:
         try:
             response = requests.get(self.base_url, params={
                 't': movie_title,
@@ -21,8 +21,8 @@ class OMDBClient(MovieAPIClient):
                 other_ratings = self.get_ratings(data, data.get('Title'))
                 other_ratings.append({'imdb':{
                     'title': data.get('Title'),
-                    'rating': data.get('imdbRating'),
-                    'vote_count': data.get('imdbVotes'),
+                    'rating': self.sanitize_number(data.get('imdbRating'),False,True),
+                    'vote_count': self.sanitize_number(data.get('imdbVotes'),True,False),
                     'year': data.get('Year'),
                     "source_name": 'IMDB'
                 }})
@@ -42,10 +42,18 @@ class OMDBClient(MovieAPIClient):
             {
                 source_mapping.get(rating['Source'], rating['Source']): {
                     "movie_title": movie_title,
-                    "rating": rating['Value'],
+                    "rating": rating['Value'].replace('%','').replace('/100',''),
                     "source_name":rating['Source']
                 }
             }
             for rating in data.get('Ratings', [])
             if source_mapping.get(rating['Source'], rating['Source']) != "imdb"
         ]
+
+    def sanitize_number(self, number, is_int,is_float) -> int | float | None:
+        if number == 'N/A':
+            return None
+        if is_int:
+            return int(number.replace(',',''))
+        if is_float:
+            return float(number.replace(',',''))

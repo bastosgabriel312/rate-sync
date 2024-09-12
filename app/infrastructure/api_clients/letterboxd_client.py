@@ -2,16 +2,16 @@
 
 import re
 import unicodedata
+
 from app.domain.repositories.movie_api_client import MovieAPIClient
-from typing import Dict, Any
 from letterboxdpy.movie import Movie
 
 
 class LetterBoxdClient(MovieAPIClient):
     def __init__(self):
-        "LetterBoxdCLient started"
+        """LetterBoxdCLient started"""
 
-    async def get_movie_rating(self, movie_title: str) -> Dict[str, Any]:
+    async def get_movie_rating(self, movie_title: str) -> dict[str:any]:
         try:
             movie_request = Movie(self.sanitize(movie_title))
             if movie_request:
