@@ -58,6 +58,7 @@ Nenhuma transformação além da seleção de campos. `poster_path` é retornado
 2. Se `Response == 'True'`:
    - Extrai ratings de `data['Ratings']` via `get_ratings()`.
    - Adiciona bloco IMDB separado com dados de `imdbRating`, `imdbVotes`, `Year`.
+   - Adiciona a propriedade `"source_name"` a cada objeto de avaliação retornado (ex: `"Rotten Tomatoes"`, `"Metacritic"`, `"IMDB"`).
 3. Retorna **lista** de dicts.
 
 ### Normalização (`get_ratings`)

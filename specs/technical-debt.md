@@ -23,6 +23,10 @@ Registro dos débitos técnicos, limitações, pontos de falha e problemas ident
 |-------|----------|
 | `app/domain/use_cases/get_movie_ratings.py:14` | Anotação inválida: `dict[str:MovieReviewSource]` (sintaxe incorreta; deveria ser `dict[str, MovieReviewSource]`). |
 | `app/infrastructure/api_clients/tmdb_client.py:41` | Anotação inválida: `dict[str:str]`. |
+| `app/infrastructure/api_clients/tmdb_client.py:30` | Anotação com tipo duplicado: `list[Any] | dict[str, str] | dict[str, str]`. |
+| `app/infrastructure/api_clients/tmdb_client.py:16` | Uso de `any` (built-in) como tipo em `dict[str, any]`; o correto é `typing.Any`. |
+| `app/infrastructure/api_clients/letterboxd_client.py:14` | Anotação inválida e uso de `any` (built-in): `dict[str:any]`; o correto é `dict[str, Any]`. |
+| `app/domain/repositories/movie_api_client.py:8` vs clients | Inconsistência de parâmetro: `MovieAPIClient.get_movie_rating` define `movie_id: str`, enquanto `TMDBClient`, `OMDBClient` e `LetterBoxdClient` declaram `movie_title: str`. |
 | `app/core/security.py:14` | `settings.JWKS_URL` — atributo não definido em `Settings`. Causaria `AttributeError` se instanciado. |
 | `app/infrastructure/services/auth_service.py:10-12` | `settings.TOKEN_URL`, `CLIENT_ID`, `CLIENT_SECRET` — atributos não definidos em `Settings`. |
 

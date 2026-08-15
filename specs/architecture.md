@@ -81,7 +81,7 @@ app/
 
 **Repositórios (abstrações):**
 
-- `MovieAPIClient` — interface com `get_movie_rating(movie_id: str)`. Implementada por TMDB, OMDb e Letterboxd.
+- `MovieAPIClient` — interface com `get_movie_rating(movie_id: str)`. Implementada por TMDB, OMDb e Letterboxd (as implementações concretas utilizam o nome de parâmetro `movie_title: str` em vez de `movie_id: str`).
 - `MovieRepository` — interface com `get_movie` e `save_movie`. **Não possui implementação concreta.**
 
 ### Infraestrutura (`app/infrastructure/`)

@@ -213,7 +213,7 @@ Em caso de erro na busca:
 {"error": "mensagem"}
 ```
 
-> Após enviar `{"error": ...}`, o handler executa `break` e **encerra o loop**, fechando a conexão.
+> Antes de enviar a resposta JSON de erro, o handler verifica explicitamente se o cliente permanece conectado via `websocket.client_state == WebSocketState.CONNECTED` (`starlette.websockets.WebSocketState`). Após o envio de `{"error": ...}`, o handler executa `break` e **encerra o loop**, fechando a conexão no bloco `finally`.
 
 #### Eventos de desconexão
 
