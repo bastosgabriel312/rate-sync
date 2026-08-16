@@ -7,6 +7,7 @@ import pytest
 from app.domain.use_cases.find_movie import FindMovie
 from app.domain.use_cases.get_movie_ratings import GetMovieRatings
 from app.core.cache import TTLCache
+from app.infrastructure.api_clients.letterboxd_client import LetterBoxdClient
 
 
 class FakeCinemeta:
@@ -72,3 +73,22 @@ async def test_find_movie_uses_cache():
     second = await use_case.execute("Inception")
     assert first == second
     assert client.calls == 1
+
+
+def test_letterboxd_client_parses_rating_metadata_from_html():
+    client = LetterBoxdClient()
+    html = '''
+    <script type="application/ld+json">{
+      "@type": "Movie",
+      "name": "Obsession",
+      "datePublished": "2026-01-01",
+      "aggregateRating": { "ratingValue": "4.2" }
+    }</script>
+    '''
+    result = client._parse_rating(html, "Obsession")
+    assert result == {"title": "Obsession", "rating": 4.2, "year": 2026}
+
+
+def test_letterboxd_client_sanitizes_title_for_url_slug():
+    client = LetterBoxdClient()
+    assert client.sanitize("The Matrix (1999)") == "the-matrix-1999"

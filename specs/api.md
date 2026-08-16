@@ -202,6 +202,24 @@ Ou objeto de erro:
 
 ## WebSocket
 
+### `GET /api/v1/metrics`
+
+Lightweight in-memory metrics for operational visibility. Returns counters produced by internal monitor (e.g., `letterboxd.failures`, `letterboxd.not_found`). Intended for dev/local monitoring and short-term troubleshooting — not a replacement for production metrics systems.
+
+**Arquivo:** `app/api/v1/routes.py` (new)
+
+**Resposta de sucesso (`200`):**
+
+```json
+{
+  "letterboxd.failures": 3,
+  "letterboxd.not_found": 10
+}
+```
+
+
+## WebSocket
+
 ### `WS /api/v1/ws/find_movie/`
 
 Busca filmes por título em tempo real. Mantém conexão aberta e processa múltiplas buscas em loop.

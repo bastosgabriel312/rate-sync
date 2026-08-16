@@ -14,6 +14,7 @@ from app.domain.use_cases.get_movie_ratings import GetMovieRatings
 from app.infrastructure.api_clients.letterboxd_client import LetterBoxdClient
 from app.infrastructure.api_clients.cinemeta_client import CinemetaClient
 from app.infrastructure.api_clients.omdb_client import OMDBClient
+from app.core.monitor import all_metrics
 
 router = APIRouter()
 
@@ -85,3 +86,15 @@ async def websocket_find_movie(websocket: WebSocket):
         print(f"Erro inesperado: {e}")
     finally:
         await websocket.close()
+
+
+@router.get("/metrics")
+async def metrics():
+    """Return in-memory metrics counters for quick operational insight.
+
+    Note: lightweight in-memory counters only for dev/local monitoring.
+    """
+    try:
+        return all_metrics()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
