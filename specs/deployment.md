@@ -36,26 +36,26 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```python
 class Settings(BaseSettings):
     app_name: ClassVar[str] = "Rate Sync"
-    TMDB_API_KEY: str
     OMDB_API_KEY: str
+    CINEMETA_BASE_URL: str = "https://v3-cinemeta.strem.io"
 
     class Config:
         env_file = ".env"
 ```
 
-### Variáveis obrigatórias
+### Variáveis
 
-| Variável | Tipo | Descrição |
-|----------|------|-----------|
-| `TMDB_API_KEY` | `str` | Chave de API do The Movie Database |
-| `OMDB_API_KEY` | `str` | Chave de API do OMDb |
+| Variável | Tipo | Obrigatória | Descrição |
+|----------|------|-------------|-----------|
+| `OMDB_API_KEY` | `str` | Sim | Chave de API do OMDb |
+| `CINEMETA_BASE_URL` | `str` | Não | Base URL da Cinemeta (padrão `https://v3-cinemeta.strem.io`) |
 
 Carregamento:
 
 1. `load_dotenv()` — lê arquivo `.env` se existir.
 2. `pydantic-settings` — valida e popula `settings`.
 
-Se variáveis obrigatórias estiverem ausentes, a aplicação **falha ao importar** `app.core.config`.
+Se variáveis obrigatórias estiverem ausentes, a aplicação **falha ao importar** `app.core.config`. Variáveis não declaradas em `Settings` (ex.: `TMDB_API_KEY`) presentes no `.env` **também** causam falha (`extra_forbidden`).
 
 ### Arquivo `.env`
 
@@ -91,7 +91,7 @@ pip install -r requirements.txt
 | `pydantic` | 2.7.0 | Validação |
 | `pydantic-settings` | 2.4.0 | Configuração |
 | `python-dotenv` | 1.0.1 | Carregamento de `.env` |
-| `tmdbv3api` | 1.9.0 | Cliente TMDB |
+| `httpx` | 0.27.2 | Cliente HTTP assíncrono (Cinemeta) |
 | `requests` | 2.32.3 | Cliente HTTP OMDb |
 | `letterboxdpy` | Git commit fixo | Scraping Letterboxd |
 | `websockets` | 13.0.1 | Suporte WebSocket (via Starlette/FastAPI) |
@@ -108,11 +108,11 @@ Lista completa em `requirements.txt` (53 pacotes incluindo transitivas pinadas).
 
 ## CORS
 
-**Arquivo:** `app/main.py`
+**Arquivo:** `app/main.py` — origens vindas de `settings.CORS_ORIGINS` (`app/core/config.py`):
 
 ```python
 CORSMiddleware(
-    allow_origins=["https://ratesync.vercel.app"],
+    allow_origins=["http://localhost:4200", "http://localhost:8100", "https://ratesync.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -122,7 +122,7 @@ CORSMiddleware(
 Implicações:
 
 - Frontend em `https://ratesync.vercel.app` pode acessar a API.
-- Requisições de `localhost` ou outras origens são bloqueadas pelo browser.
+- Dev local (`http://localhost:4200` / `http://localhost:8100`) permitido.
 - `allow_credentials=True` requer origem explícita (não `*`).
 
 ---
@@ -159,7 +159,7 @@ Não há:
 ### Requisitos inferidos da configuração
 
 1. Python compatível com as dependências pinadas.
-2. Variáveis `TMDB_API_KEY` e `OMDB_API_KEY` configuradas.
+2. Variável `OMDB_API_KEY` configurada (obrigatória).
 3. Uvicorn ou equivalente para servir `app.main:app`.
 
 ---
@@ -182,7 +182,7 @@ Porta padrão do Uvicorn: `8000` (convenção; não configurada no código).
 | Logging configurado (`logging` module) | Não identificado no código analisado |
 | Métricas (Prometheus, etc.) | Não identificado no código analisado |
 | APM / tracing | Não identificado no código analisado |
-| Health check endpoint | Não identificado no código analisado |
+| Health check endpoint | `GET /api/v1/health` (status, timestamp, versão) |
 
 Único output observável: `print()` em `app/api/v1/routes.py` (WebSocket) e `app/infrastructure/api_clients/letterboxd_client.py` (erros).
 
@@ -208,7 +208,6 @@ Com base no que o código exige para funcionar:
 
 - [ ] Python instalado
 - [ ] `pip install -r requirements.txt`
-- [ ] `TMDB_API_KEY` configurada
 - [ ] `OMDB_API_KEY` configurada
 - [ ] Servidor ASGI apontando para `app.main:app`
 - [ ] CORS origin alinhada com o domínio do frontend

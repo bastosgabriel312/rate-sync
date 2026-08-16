@@ -2,13 +2,13 @@
 
 import pydantic
 
-class MovieRatingResponse(pydantic.BaseModel):
-    omdb: dict
-    tmdb: dict
-    rotten_tomatoes: dict
-
 class MovieReviewSource(pydantic.BaseModel):
-    title:str
-    rating: float | str | None
-    year: int | str | None
-    error: str | None
+    title: str | None = None
+    rating: float | str | None = None
+    year: int | str | None = None
+    error: str | None = None
+
+class MovieRatingResponse(pydantic.BaseModel):
+    cinemeta: MovieReviewSource | dict[str, str]
+    omdb: list[dict] | dict[str, str]
+    letterboxd: MovieReviewSource | dict[str, str]

@@ -8,36 +8,44 @@ O backend não possui um módulo de scraping dedicado. A coleta de dados ocorre 
 
 | Client | Arquivo | Mecanismo | Biblioteca |
 |--------|---------|-----------|------------|
-| `TMDBClient` | `tmdb_client.py` | API oficial (SDK) | `tmdbv3api` 1.9.0 |
+| `CinemetaClient` | `cinemeta_client.py` | REST HTTP (GET) | `httpx` 0.27.2 |
 | `OMDBClient` | `omdb_client.py` | API REST (HTTP GET) | `requests` 2.32.3 |
 | `LetterBoxdClient` | `letterboxd_client.py` | Scraping (via lib) | `letterboxdpy` (Git) |
 
-## TMDBClient
+## CinemetaClient
 
-**Arquivo:** `app/infrastructure/api_clients/tmdb_client.py`
+**Arquivo:** `app/infrastructure/api_clients/cinemeta_client.py`
 
 ### Configuração
 
-- API key: `settings.TMDB_API_KEY`
-- SDK: `tmdbv3api` (`TMDb`, `Search`, `Movie`)
+- Base URL: `settings.CINEMETA_BASE_URL` (padrão: `https://v3-cinemeta.strem.io`).
+- **Sem API key.** A Cinemeta (addon Stremio) não exige credencial.
+- Cliente HTTP assíncrono: `httpx.AsyncClient(follow_redirects=True)`.
 
-### Operações
+### Endpoints consumidos
 
-| Método | SDK call | Retorno |
-|--------|----------|---------|
-| `get_movie_rating(movie_title)` | `Search.movies(movie_title)` → primeiro resultado | `{title, rating, vote_count}` |
-| `find_movie(movie_title)` | `Search.movies(movie_title)` → todos os resultados | `[{title, overview, poster_path}, ...]` |
-| `find_more_populars()` | `Movie.popular()` | `[{title, overview, poster_path}, ...]` |
+| Operação | Endpoint Cinemeta | Retorno |
+|----------|-------------------|---------|
+| `get_movie_rating(movie_title)` | `GET /catalog/movie/top/search={query}.json` → primeiro resultado → `GET /meta/movie/{imdb_id}.json` | `{title, rating, year}` |
+| `find_movie(movie_title)` | `GET /catalog/movie/top/search={query}.json` | `[{title, overview, poster_path}, ...]` |
+| `find_more_populars()` | `GET /catalog/movie/top.json` (redireciona para `cinemeta-catalogs.strem.io`) | `[{title, overview, poster_path}, ...]` |
+
+### Normalização
+
+- `rating` vem do campo `imdbRating` (string) convertido para `float`; `None` se ausente/`N/A`.
+- `year` vem de `releaseInfo` convertido para `int`.
+- `poster_path` recebe o valor **URL completa** de `poster` da Cinemeta (ex.: `https://m.media-amazon.com/...`) — **não** é um path relativo como no TMDB.
+- `overview` usa `description` quando presente; nas buscas (`search`) a Cinemeta não retorna descrição, então `overview` vem vazio (`""`).
 
 ### Comportamento em erro
 
 - Filme não encontrado: `{"error": "Movie not found"}`
 - Exceção: `{"error": str(e)}`
-- Usa sempre o **primeiro resultado** da busca para ratings (pode não corresponder ao filme desejado).
+- Usa sempre o **primeiro resultado** da busca para ratings (mesma heurística do TMDB antigo; título ambíguo pode retornar filme errado).
 
-### Normalização
+### Dependência externa (nota)
 
-Nenhuma transformação além da seleção de campos. `poster_path` é retornado como recebido do TMDB (path relativo, ex: `/abc.jpg`).
+A Cinemeta é um addon mantido pela comunidade Stremio. A busca é exposta via `catalog` com extra `search` (o manifest **não** declara recurso `search` próprio). Redirecionamentos (307) para `cinemeta-catalogs.strem.io` são seguidos automaticamente.
 
 ---
 
@@ -169,12 +177,12 @@ Ratings do Rotten Tomatoes são obtidos via OMDb, não via este pacote.
 
 ```
 execute(movie_title)
-  ├── tmdb_client.get_movie_rating(movie_title)    → dict
-  ├── omdb_client.get_movie_rating(movie_title)    → list | dict
+  ├── cinemeta_client.get_movie_rating(movie_title)  → dict
+  ├── omdb_client.get_movie_rating(movie_title)      → list | dict
   └── letterboxd_client.get_movie_rating(movie_title) → dict
 
   return {
-    "tmdb": tmdb_rating,
+    "cinemeta": cinemeta_rating,
     "omdb": omdb_rating,
     "letterboxd": letterboxd_rating
   }
@@ -186,7 +194,7 @@ Não há normalização unificada entre fontes. Cada client retorna formato pró
 
 | Fonte | Tipo de retorno em sucesso | Tipo de retorno em erro |
 |-------|---------------------------|------------------------|
-| TMDB | `dict` | `dict` com `error` |
+| Cinemeta | `dict` | `dict` com `error` |
 | OMDb | `list[dict]` | `dict` com `error` |
 | Letterboxd | `dict` | `dict` com `error` |
 
@@ -194,18 +202,19 @@ O cliente consumidor precisa tratar `omdb` como lista ou dict de erro.
 
 ## Processamento assíncrono
 
-Todos os métodos dos clients são declarados `async`, porém:
+Todos os métodos dos clients são declarados `async` e executam de forma não bloqueante:
 
-- `TMDBClient` usa `tmdbv3api` (chamadas **síncronas** bloqueantes).
-- `OMDBClient` usa `requests.get()` (chamadas **síncronas** bloqueantes).
-- `LetterBoxdClient` usa `letterboxdpy` (operação **síncrona** bloqueante).
+- `CinemetaClient` usa `httpx.AsyncClient` (**assíncrono** de fato).
+- `OMDBClient` usa `httpx.AsyncClient` (**assíncrono** de fato, desde 2026-08-16).
+- `LetterBoxdClient` usa `letterboxdpy` (biblioteca **síncrona**), executada via `asyncio.to_thread` para não bloquear o event loop.
 
-Não há uso de `asyncio.gather`, thread pool ou `httpx` async.
+`GetMovieRatings.execute()` dispara as três fontes em **paralelo** via `asyncio.gather(..., return_exceptions=True)`, isolando falha de uma fonte sem quebrar a resposta.
 
 ## Limitações atuais
 
 - Busca por título, não por ID unificado entre fontes.
-- TMDB usa primeiro resultado da busca; OMDb exige título exato; Letterboxd usa slug derivado do título.
+- Cinemeta usa primeiro resultado da busca; OMDb exige título exato; Letterboxd usa slug derivado do título.
 - Sem retry, timeout configurável ou circuit breaker nas chamadas externas.
 - Sem validação de rate limits das APIs externas.
 - OMDb usa HTTP sem TLS (`http://www.omdbapi.com/`).
+- Dependência da infraestrutura da comunidade Stremio (Cinemeta) — pode sofrer rate limit/instabilidade.

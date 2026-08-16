@@ -1,6 +1,7 @@
 # app/infrastructure/api_clients/omdb_client.py
 
-import requests
+import httpx
+
 from app.core.config import settings
 from app.domain.repositories.movie_api_client import MovieAPIClient
 
@@ -12,11 +13,12 @@ class OMDBClient(MovieAPIClient):
 
     async def get_movie_rating(self, movie_title: str) -> list[dict] | dict[str, str]:
         try:
-            response = requests.get(self.base_url, params={
-                't': movie_title,
-                'apikey': self.api_key
-            })
-            data = response.json()
+            async with httpx.AsyncClient() as client:
+                response = await client.get(self.base_url, params={
+                    't': movie_title,
+                    'apikey': self.api_key
+                })
+                data = response.json()
             if data.get('Response') == 'True':
                 other_ratings = self.get_ratings(data, data.get('Title'))
                 other_ratings.append({'imdb':{

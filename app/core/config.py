@@ -8,8 +8,15 @@ load_dotenv()
 
 class Settings(BaseSettings):
     app_name: ClassVar[str] = "Rate Sync"
-    TMDB_API_KEY: str
     OMDB_API_KEY: str
+    CINEMETA_BASE_URL: str = "https://v3-cinemeta.strem.io"
+    SEARCH_CACHE_TTL_SECONDS: int = 3600
+    RATINGS_CACHE_TTL_SECONDS: int = 900
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:4200",
+        "http://localhost:8100",
+        "https://ratesync.vercel.app",
+    ]
 
     class Config:
         env_file = ".env"

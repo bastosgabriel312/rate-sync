@@ -25,11 +25,11 @@ A aplicação segue uma organização em **camadas inspirada em Clean Architectu
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
 │  app/infrastructure/api_clients/                              │
-│  TMDBClient | OMDBClient | LetterBoxdClient                   │
+│  CinemetaClient | OMDBClient | LetterBoxdClient               │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
-              APIs externas (TMDB, OMDb, Letterboxd)
+              APIs externas (Cinemeta, OMDb, Letterboxd)
 ```
 
 ## Estrutura de diretórios
@@ -41,7 +41,7 @@ app/
 │   ├── routes.py                        # Rotas e wiring de dependências
 │   └── schemas.py                       # Modelos Pydantic (não usados nas rotas)
 ├── core/
-│   ├── config.py                        # Settings (TMDB_API_KEY, OMDB_API_KEY)
+│   ├── config.py                        # Settings (OMDB_API_KEY, CINEMETA_BASE_URL)
 │   └── security.py                      # SecurityService (não integrado)
 ├── domain/
 │   ├── use_cases/
@@ -53,7 +53,7 @@ app/
 │       └── movie_repository.py          # ABC não implementada
 └── infrastructure/
     ├── api_clients/
-    │   ├── tmdb_client.py
+    │   ├── cinemeta_client.py
     │   ├── omdb_client.py
     │   └── letterboxd_client.py
     └── services/
@@ -75,13 +75,13 @@ app/
 
 | Use case | Arquivo | Dependências | Método |
 |----------|---------|--------------|--------|
-| `FindMovie` | `find_movie.py` | `TMDBClient` | `execute(movie_title)` |
-| `GetMorePopulars` | `get_more_populars.py` | `TMDBClient` | `execute()` |
-| `GetMovieRatings` | `get_movie_ratings.py` | `TMDBClient`, `OMDBClient`, `LetterBoxdClient` | `execute(movie_title)` |
+| `FindMovie` | `find_movie.py` | `CinemetaClient` | `execute(movie_title)` |
+| `GetMorePopulars` | `get_more_populars.py` | `CinemetaClient` | `execute()` |
+| `GetMovieRatings` | `get_movie_ratings.py` | `CinemetaClient`, `OMDBClient`, `LetterBoxdClient` | `execute(movie_title)` |
 
 **Repositórios (abstrações):**
 
-- `MovieAPIClient` — interface com `get_movie_rating(movie_id: str)`. Implementada por TMDB, OMDb e Letterboxd (as implementações concretas utilizam o nome de parâmetro `movie_title: str` em vez de `movie_id: str`).
+- `MovieAPIClient` — interface com `get_movie_rating(movie_id: str)`. Implementada por Cinemeta, OMDb e Letterboxd (as implementações concretas utilizam o nome de parâmetro `movie_title: str` em vez de `movie_id: str`).
 - `MovieRepository` — interface com `get_movie` e `save_movie`. **Não possui implementação concreta.**
 
 ### Infraestrutura (`app/infrastructure/`)
@@ -91,7 +91,7 @@ app/
 
 ### Core (`app/core/`)
 
-- **Settings** — carrega `TMDB_API_KEY` e `OMDB_API_KEY` de variáveis de ambiente / `.env`.
+- **Settings** — carrega `OMDB_API_KEY` e `CINEMETA_BASE_URL` de variáveis de ambiente / `.env`.
 - **SecurityService** — validação de JWT via JWKS do Cognito. **Não é referenciado por nenhuma rota.**
 
 ## Fluxo de dados
@@ -102,8 +102,10 @@ app/
 Cliente WS
   → receive_text(movie_title)
   → FindMovie.execute(movie_title)
-  → TMDBClient.find_movie(movie_title)
-  → tmdbv3api Search.movies()
+  → cache.get("search:{title}")           # TTL 1h
+  → CinemetaClient.find_movie(movie_title)
+  → GET /catalog/movie/top/search={query}.json
+  → cache.set("search:{title}", ...)
   → send_json([{title, overview, poster_path}, ...])
 ```
 
@@ -112,7 +114,9 @@ Cliente WS
 ```
 GET /api/v1/movie/?movie_title=
   → FindMovie.execute(movie_title)
-  → TMDBClient.find_movie()
+  → cache.get("search:{title}")           # TTL 1h
+  → CinemetaClient.find_movie()
+  → cache.set("search:{title}", ...)
   → JSON response
 ```
 
@@ -121,8 +125,8 @@ GET /api/v1/movie/?movie_title=
 ```
 GET /api/v1/more_populars
   → GetMorePopulars.execute()
-  → TMDBClient.find_more_populars()
-  → tmdbv3api Movie.popular()
+  → CinemetaClient.find_more_populars()
+  → GET /catalog/movie/top.json
   → JSON response [{title, overview, poster_path}, ...]
 ```
 
@@ -131,13 +135,16 @@ GET /api/v1/more_populars
 ```
 GET /api/v1/ratings/{movie_id}
   → GetMovieRatings.execute(movie_id)    # parâmetro é tratado como título
-  → TMDBClient.get_movie_rating()        # sequencial
-  → OMDBClient.get_movie_rating()        # sequencial
-  → LetterBoxdClient.get_movie_rating()  # sequencial
-  → JSON response {tmdb, omdb, letterboxd}
+  → cache.get("ratings:{title}")         # TTL 15m
+  → asyncio.gather(..., return_exceptions=True)
+  → CinemetaClient.get_movie_rating()    # httpx async
+  → OMDBClient.get_movie_rating()        # httpx async
+  → LetterBoxdClient.get_movie_rating()  # letterboxdpy sync via asyncio.to_thread
+  → cache.set("ratings:{title}", ...)
+  → JSON response {cinemeta, omdb, letterboxd}
 ```
 
-> As três chamadas de rating são `await` sequenciais. Os métodos são declarados `async`, mas os clients TMDB e OMDb executam operações **síncronas** internamente (`tmdbv3api`, `requests`).
+> As três chamadas de rating executam em **paralelo** via `asyncio.gather(..., return_exceptions=True)`. Falha isolada de uma fonte é convertida em `{"error": ...}` sem quebrar a resposta completa. Resultado agregado é cacheado em memória por 15 minutos (`RATINGS_CACHE_TTL_SECONDS`).
 
 ## Injeção de dependências
 
@@ -149,9 +156,9 @@ GET /api/v1/ratings/{movie_id}
 
 ## Modelos e validação de entrada/saída
 
-- `app/api/v1/schemas.py` define `MovieRatingResponse` e `MovieReviewSource`.
-- **Nenhuma rota utiliza esses schemas** como `response_model` ou validação de entrada.
-- As respostas são dicts Python retornados diretamente pelos use cases.
+- `app/api/v1/schemas.py` define `MovieRatingResponse` e `MovieReviewSource`, alinhados à estrutura real de resposta (2026-08-16): `cinemeta`/`letterboxd` = `{title, rating, year}`; `omdb` = `list[dict]`.
+- **Nenhuma rota utiliza esses schemas** como `response_model` ou validação de entrada (as respostas são dicts retornados diretamente pelos use cases, mantendo contrato flexível entre fontes).
+- Cache em memória: `app/core/cache.py` — `TTLCache` LRU thread-safe, com `shared_cache` global. TTLs em `Settings`: `SEARCH_CACHE_TTL_SECONDS` (1h), `RATINGS_CACHE_TTL_SECONDS` (15m).
 
 ## Autenticação e segurança (estado atual)
 
@@ -163,9 +170,9 @@ GET /api/v1/ratings/{movie_id}
 
 ## CORS
 
-Configurado em `app/main.py`:
+Configurado em `app/main.py` (origens de `settings.CORS_ORIGINS`):
 
-- `allow_origins`: `["https://ratesync.vercel.app"]`
+- `allow_origins`: `["http://localhost:4200", "http://localhost:8100", "https://ratesync.vercel.app"]`
 - `allow_credentials`: `True`
 - `allow_methods`: `["*"]`
 - `allow_headers`: `["*"]`
@@ -186,9 +193,8 @@ infrastructure/services/auth_service.py → core/config.py (referencia TOKEN_URL
 
 ## Limitações arquiteturais atuais
 
-- Não há camada de persistência — toda consulta vai às APIs externas.
-- Não há cache — mesma busca gera novas chamadas externas.
+- Não há camada de persistência — toda consulta vai às APIs externas (com cache transitório em memória).
 - Código de autenticação existe mas não participa do fluxo de requisições.
 - `MovieRepository` definido mas sem implementação.
-- Schemas Pydantic definidos mas não aplicados nas rotas.
+- Schemas Pydantic definidos mas não aplicados como `response_model` nas rotas.
 - Parâmetro `movie_id` nos endpoints é, na prática, um **título de filme** (string livre).

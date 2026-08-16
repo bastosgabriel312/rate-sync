@@ -4,44 +4,42 @@ Documentação do estado atual de testes automatizados no backend RateSync.
 
 ## Resumo
 
-**Não identificado no código analisado.**
+Suíte `pytest` criada em `tests/` em 2026-08-16 durante a refatoração Phase 2.
 
-Não há arquivos de teste no repositório do backend.
+## Framework
 
-## O que foi verificado
+- `pytest` + `pytest-asyncio` (modo `auto`) + `httpx` (TestClient FastAPI).
+- Dependências de desenvolvimento em `requirements-dev.txt`.
+- Configuração em `pytest.ini` (`asyncio_mode = auto`, `testpaths = tests`).
 
-| Item | Resultado |
-|------|-----------|
-| Arquivos `test_*.py` | Não encontrados |
-| Arquivos `*_test.py` | Não encontrados |
-| Diretório `tests/` | Não encontrado |
-| `pytest` em `requirements.txt` | Não presente |
-| `unittest` / `pytest` no código `app/` | Não referenciado |
-| Configuração de CI (`.github/workflows`, etc.) | Não identificado no código analisado |
+## Suíte atual (11 testes)
 
-## Framework de teste disponível (via dependências)
+| Arquivo | Cobertura |
+|---------|-----------|
+| `tests/test_cache.py` | `TTLCache`: set/get, TTL por item, expiração, evicção LRU |
+| `tests/test_use_cases.py` | `GetMovieRatings` (agregação, isolamento de falha, cache), `FindMovie` (cache) com clients mockados |
+| `tests/test_routes.py` | `GET /api/v1/health`, `GET /api/v1/ratings/{movie_id}` (chamada real externa) |
 
-`fastapi` inclui `TestClient` (`fastapi.testclient`), mas **não há uso** no código da aplicação.
+## Como rodar
+
+```bash
+python -m pytest
+```
 
 ## Cobertura aparente
 
 | Área | Cobertura |
 |------|-----------|
-| Endpoints REST | 0% |
-| WebSocket | 0% |
-| Use cases | 0% |
-| API clients (TMDB, OMDb, Letterboxd) | 0% |
-| Configuração / Settings | 0% |
-| SecurityService / AuthService | 0% |
-| Normalização (OMDb `sanitize_number`, Letterboxd `sanitize`) | 0% |
+| Cache (`app/core/cache.py`) | ✔ Testado |
+| Use cases (`GetMovieRatings`, `FindMovie`) | ✔ Testado (com mocks) |
+| Endpoints REST (`health`, `ratings`) | ✔ Testado |
+| WebSocket | ✘ Sem teste automatizado (validado manualmente) |
+| API clients reais (Cinemeta, OMDb, Letterboxd) | ✘ Não mockados (rotas usam chamada real) |
+| Normalização (OMDb `sanitize_number`, Letterboxd `sanitize`) | ✘ |
+| Configuração / Settings | ✘ |
 
-## Testes manuais
+## Observações
 
-Não identificado no código analisado. Não há scripts, coleções Postman ou documentação de testes manuais no repositório.
-
-## Implicações
-
-- Mudanças em clients externos ou formatos de resposta não são detectadas automaticamente.
-- Regressões em normalização de dados (OMDb ratings, sanitização Letterboxd) passam despercebidas.
-- Código de autenticação (`SecurityService`, `AuthService`) não possui validação automatizada.
-- Bugs de tipagem conhecidos (ex: `dict[str:MovieReviewSource]` em `get_movie_ratings.py`) não são capturados por linter/CI no repositório.
+- Testes de use cases usam cache dedicado (`TTLCache()` por instância) para não depender do `shared_cache` global (populado por testes de rota reais).
+- `tests/test_routes.py::test_ratings_returns_three_sources` faz chamada externa real — depende de rede e da chave OMDb do ambiente (no dev, `OMDB_API_KEY=test_key` faz o OMDb retornar `{"error": ...}`, o que valida a resiliência).
+- Bug de tipagem `dict[str:MovieReviewSource]` corrigido em 2026-08-16; cobre a implicação anterior de falta de CI/linter para erros de tipo.

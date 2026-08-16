@@ -1,7 +1,9 @@
 # app/infrastructure/api_clients/letterboxd_client.py
 
+import asyncio
 import re
 import unicodedata
+from typing import Any
 
 from app.domain.repositories.movie_api_client import MovieAPIClient
 from letterboxdpy.movie import Movie
@@ -11,9 +13,9 @@ class LetterBoxdClient(MovieAPIClient):
     def __init__(self):
         """LetterBoxdCLient started"""
 
-    async def get_movie_rating(self, movie_title: str) -> dict[str:any]:
+    async def get_movie_rating(self, movie_title: str) -> dict[str, Any]:
         try:
-            movie_request = Movie(self.sanitize(movie_title))
+            movie_request = await asyncio.to_thread(Movie, self.sanitize(movie_title))
             if movie_request:
                 return {
                     'title': movie_request.title,

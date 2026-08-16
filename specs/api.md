@@ -15,12 +15,35 @@ Nenhum endpoint exige autenticação no estado atual. `SecurityService` e `AuthS
 
 ## Endpoints REST
 
+### `GET /api/v1/health`
+
+Retorna o estado operacional da API backend.
+
+**Arquivo:** `app/api/v1/routes.py`  
+**Contrato (SDD 7.1):** `{ "status", "timestamp", "version" }`
+
+#### Parâmetros
+
+Nenhum.
+
+#### Resposta de sucesso (`200`)
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-08-16T00:35:18.506007+00:00",
+  "version": "1.0.0"
+}
+```
+
+---
+
 ### `GET /api/v1/ratings/{movie_id}`
 
-Retorna avaliações consolidadas de um filme a partir de TMDB, OMDb e Letterboxd.
+Retorna avaliações consolidadas de um filme a partir de Cinemeta, OMDb e Letterboxd.
 
-**Arquivo:** `app/api/v1/routes.py` (linhas 35–41)  
-**Use case:** `GetMovieRatings.execute(movie_id)`
+**Arquivo:** `app/api/v1/routes.py` (linhas 45–51)  
+**Use case:** `GetMovieRatings.execute(movie_title)` — agrega Cinemeta, OMDb e Letterboxd em **paralelo** (`asyncio.gather(..., return_exceptions=True)`); falha isolada de uma fonte retorna `{"error": ...}` sem quebrar a resposta. Resultado cacheado em memória por `RATINGS_CACHE_TTL_SECONDS` (15m).
 
 #### Parâmetros
 
@@ -32,7 +55,7 @@ Retorna avaliações consolidadas de um filme a partir de TMDB, OMDb e Letterbox
 
 ```json
 {
-  "tmdb": { ... },
+  "cinemeta": { ... },
   "omdb": [ ... ] | { "error": "..." },
   "letterboxd": { ... }
 }
@@ -40,12 +63,12 @@ Retorna avaliações consolidadas de um filme a partir de TMDB, OMDb e Letterbox
 
 **Formato por fonte:**
 
-**`tmdb`** — objeto:
+**`cinemeta`** — objeto:
 ```json
 {
   "title": "string",
-  "rating": number,
-  "vote_count": number
+  "rating": number | null,
+  "year": number | null
 }
 ```
 Ou `{"error": "Movie not found"}` / `{"error": "mensagem"}`.
@@ -100,7 +123,7 @@ Ou `{"error": "Movie not found"}` / `{"error": "mensagem"}`.
 
 ### `GET /api/v1/more_populars`
 
-Retorna lista de filmes populares do TMDB.
+Retorna lista de filmes populares da Cinemeta (catálogo `top`).
 
 **Arquivo:** `app/api/v1/routes.py` (linhas 43–49)  
 **Use case:** `GetMorePopulars.execute()`
@@ -137,7 +160,7 @@ Ou objeto de erro:
 
 ### `GET /api/v1/movie/`
 
-Busca filmes por título via TMDB.
+Busca filmes por título via Cinemeta.
 
 **Arquivo:** `app/api/v1/routes.py` (linhas 51–57)  
 **Use case:** `FindMovie.execute(movie_title)`
@@ -230,24 +253,26 @@ Em caso de erro na busca:
 
 ```python
 class MovieRatingResponse(pydantic.BaseModel):
-    omdb: dict
-    tmdb: dict
-    rotten_tomatoes: dict
+    cinemeta: MovieReviewSource | dict[str, str]
+    omdb: list[dict] | dict[str, str]
+    letterboxd: MovieReviewSource | dict[str, str]
 ```
 
-**Não é usado** como `response_model` em nenhuma rota. O campo `rotten_tomatoes` não corresponde à resposta real (ratings do Rotten Tomatoes vêm dentro de `omdb`).
+Alinhado à resposta real de `get_movie_ratings` (2026-08-16).
 
 ### `MovieReviewSource`
 
 ```python
 class MovieReviewSource(pydantic.BaseModel):
-    title: str
-    rating: float | str | None
-    year: int | str | None
-    error: str | None
+    title: str | None = None
+    rating: float | str | None = None
+    year: int | str | None = None
+    error: str | None = None
 ```
 
-Importado em `get_movie_ratings.py` mas **não utilizado** para validação ou serialização da resposta.
+Representa a estrutura de `cinemeta`/`letterboxd` (`{title, rating, year}`) e casos de erro (`{error}`).
+
+**Nenhum desses schemas é usado** como `response_model` nas rotas — as respostas são dicts retornados diretamente pelos use cases.
 
 ---
 
@@ -265,7 +290,7 @@ Não há tratamento explícito para `404` ou `422` nos endpoints atuais.
 
 ## CORS
 
-Apenas origem `https://ratesync.vercel.app` é permitida (`app/main.py`). Requisições de outras origens serão bloqueadas pelo browser.
+Origens permitidas via `settings.CORS_ORIGINS` (`app/main.py`): dev local (`http://localhost:4200`, `http://localhost:8100`) e produção (`https://ratesync.vercel.app`). Origens fora da lista serão bloqueadas pelo browser.
 
 ---
 

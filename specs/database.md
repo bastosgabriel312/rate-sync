@@ -32,7 +32,7 @@ Nenhuma classe concreta implementa essa interface. Nenhum use case a utiliza.
 
 Os dados de filmes e avaliações **não são persistidos**. Cada requisição:
 
-1. Consulta APIs externas (TMDB, OMDb, Letterboxd) em tempo real.
+1. Consulta APIs externas (Cinemeta, OMDb, Letterboxd) em tempo real.
 2. Retorna o resultado diretamente ao cliente.
 3. Não armazena o resultado em memória, disco ou banco.
 
@@ -73,8 +73,8 @@ Variáveis em `app/core/config.py`:
 
 | Variável | Propósito |
 |----------|-----------|
-| `TMDB_API_KEY` | Credencial de API (não é dado persistido) |
 | `OMDB_API_KEY` | Credencial de API (não é dado persistido) |
+| `CINEMETA_BASE_URL` | Base URL da Cinemeta (sem credencial) |
 
 Variáveis referenciadas em código não integrado (também não são persistência):
 

@@ -1,142 +1,112 @@
-# AGENTS.md — RateSync Backend
+# AGENTS.md — RateSync Backend Directive
 
-Orientações para agentes de IA que trabalham neste repositório.
+Operational directives and technical guidelines for AI agents working within the **rate-sync** (Python / FastAPI) repository.
 
-## Escopo
+---
 
-Este repositório (`rate-sync/`) contém o **backend** do RateSync: uma API Python/FastAPI que agrega dados e avaliações de filmes a partir de fontes externas (TMDB, OMDb e Letterboxd).
+## 1. Repository Scope & Limits
 
-**Não modifique o frontend** (`rate-sync-ionic/`), salvo se a tarefa explicitamente exigir leitura de contratos de integração — e mesmo assim, sem alterar arquivos do frontend.
+This repository (`rate-sync/`) contains the Python FastAPI backend for RateSync, serving REST endpoints, a real-time WebSocket search stream, and external API integrations (Cinemeta, OMDb, Letterboxd).
 
-## Antes de qualquer mudança
+- **Scope**: Modifications are strictly confined to `rate-sync/` and `rate-sync/specs/`.
+- **Frontend Isolation**: Do NOT modify files in `rate-sync-ionic/`. The frontend is read-only for contract verification.
 
-1. Leia a documentação em `specs/`:
-   - `specs/README.md` — visão geral
-   - `specs/architecture.md` — camadas e fluxo de dados
-   - `specs/api.md` — contratos dos endpoints
-   - `specs/scraper.md` — integrações externas e normalização
-   - `specs/database.md` — persistência (atualmente inexistente)
-   - `specs/testing.md` — estado dos testes
-   - `specs/technical-debt.md` — limitações conhecidas
-   - `specs/deployment.md` — configuração e ambiente
+---
 
-2. Identifique quais arquivos em `app/` serão afetados e mantenha-se dentro do escopo da tarefa.
+## 2. Mandatory Documentation Gate (Backend)
 
-3. Confirme o impacto no frontend: o consumidor principal está em `rate-sync-ionic/` e depende dos contratos documentados em `specs/api.md`.
+> **IMPLICIT AND MANDATORY RULE**: Before proposing or executing code changes in `rate-sync/`, the agent MUST automatically inspect the backend specifications.
 
-## Arquitetura
+### Pre-Execution Inspection Order:
+1. `rate-sync/specs/README.md` — Backend specifications index.
+2. `specs/SDD.md` — Global Software Design Document.
+3. `rate-sync/specs/architecture.md` — Layered architecture and data flows.
+4. `rate-sync/specs/api.md` — REST and WebSocket contracts.
+5. `rate-sync/specs/scraper.md` — External clients and scraper normalization rules.
+6. `rate-sync/specs/technical-debt.md` — Official technical debt registry and legacy code rules.
 
-Respeite a organização em camadas documentada em `specs/architecture.md`:
+*Token Efficiency*: Read the minimum relevant documentation necessary for the task, but always check `rate-sync/specs/README.md`, `specs/SDD.md`, and `technical-debt.md` before code edits.
+
+---
+
+## 3. Critical Directive: Authentication Out of Scope
+
+> ⚠️ **AUTHENTICATION IS OUT OF SCOPE FOR THIS REFACTORING PHASE.**
+
+The following legacy authentication modules are classified in `technical-debt.md`:
+- `app/core/security.py` → **NÃO INTEGRAR** / **DESCARTAR APÓS VALIDAÇÃO**
+- `app/infrastructure/services/auth_service.py` → **NÃO INTEGRAR** / **DESCARTAR APÓS VALIDAÇÃO**
+
+### Rules for Auth Code:
+- ❌ Do NOT integrate these files into active routes or use cases.
+- ❌ Do NOT use these files as a base for implementing auth in this phase.
+- ❌ Do NOT implement JWT, Cognito, OAuth2, or auth guards.
+- ❌ Do NOT delete these files automatically without the 6-step validation protocol.
+
+---
+
+## 4. Legacy Removal Protocol (`DESCARTAR APÓS VALIDAÇÃO`)
+
+Before physically removing any file marked `DESCARTAR APÓS VALIDAÇÃO`, the agent MUST:
+1. Search all references and imports (`grep_search`).
+2. Search active consumers across routes and use cases.
+3. Check unit test suites (`pytest`).
+4. Check package dependencies.
+5. Update `rate-sync/specs/technical-debt.md` with final decision.
+6. Only then remove the file IF explicitly authorized by task.
+
+---
+
+## 5. Target Backend Architecture
+
+The backend follows Clean Layered Architecture:
 
 ```
 app/
-├── main.py                    # Entry point, CORS
-├── api/v1/                    # Rotas REST e WebSocket
-├── core/                      # Configuração e segurança
+├── main.py                    # Entry point, CORS middleware, router inclusion
+├── api/
+│   └── v1/                    # REST endpoints and WebSocket handlers
+├── core/                      # Configuration (config.py), cache (cache.py), logging
 ├── domain/
-│   ├── use_cases/             # Orquestração de regras
-│   └── repositories/          # Abstrações (ABC)
+│   ├── models/                # Pure domain entities / dataclasses
+│   ├── repositories/          # Abstract Repository Interfaces (ABCs)
+│   └── use_cases/             # Async business logic and aggregation use cases
 └── infrastructure/
-    ├── api_clients/           # TMDB, OMDb, Letterboxd
-    └── services/              # Serviços de infraestrutura
+    ├── api_clients/           # Async HTTP clients (CinemetaClient, OMDBClient, LetterboxdClient)
+    └── services/              # Infrastructure services
 ```
 
-Regras:
+### Architectural Guidelines:
+- **Routes (`app/api/v1/`)**: Controllers must remain thin, delegating business logic to use cases.
+- **Async I/O (`app/infrastructure/api_clients/`)**: Use non-blocking `httpx.AsyncClient` inside `async` use cases. Avoid blocking `requests` library in event loop.
+- **Resilient Aggregation**: External API failures (e.g., Letterboxd scraper outage) must be caught isolatedly, returning partial ratings without crashing HTTP 500.
 
-- Rotas em `app/api/v1/` — sem lógica de negócio pesada; delegue a use cases.
-- Regras de orquestração em `app/domain/use_cases/`.
-- Chamadas a APIs externas em `app/infrastructure/api_clients/`.
-- Configuração centralizada em `app/core/config.py`.
+---
 
-Não mova código entre camadas ou refatore estrutura fora do escopo da tarefa.
+## 6. Persistence & Cache Policy
 
-## Regras de API
+- **No Relational/NoSQL Database**: Do NOT introduce ORMs (SQLAlchemy, Tortoise) or physical DBs in this refactoring phase.
+- **In-Memory Cache**: Use lightweight LRU/TTL cache (`app/core/cache.py`) for search (1h TTL) and ratings (15m TTL) to minimize external API rate limits.
 
-- **Consulte `specs/api.md` antes de modificar endpoints**, parâmetros, códigos de status ou formatos de resposta.
-- **Não altere a API sem atualizar `specs/api.md`** com o comportamento real resultante.
-- Endpoints ativos (base `/api/v1`):
-  - `GET /ratings/{movie_id}`
-  - `GET /more_populars`
-  - `GET /movie/?movie_title=`
-  - `WS /ws/find_movie/`
-- Preserve **compatibilidade com o frontend** (`rate-sync-ionic/`). Mudanças breaking em formato de resposta exigem atualização coordenada da spec e comunicação explícita na tarefa.
-- O parâmetro `movie_id` em `/ratings/{movie_id}` é tratado como **título** pelos clients — não renomeie ou mude semântica sem atualizar spec e frontend.
-- CORS está configurado para `https://ratesync.vercel.app` em `app/main.py` — alterações de origem afetam o frontend em produção.
+---
 
-## Banco de dados e persistência
+## 7. Automated Testing Strategy
 
-O backend **não possui banco de dados** no estado atual (`specs/database.md`).
+- **Framework**: `pytest` + `pytest-asyncio` + `httpx.AsyncClient`.
+- Create or update test files in `tests/` when modifying endpoints or use cases.
+- Use mocks for external HTTP APIs during unit tests.
 
-- **Não execute operações destrutivas em banco** — não há banco configurado neste projeto.
-- Se a tarefa introduzir persistência:
-  - Documente o schema em `specs/database.md`.
-  - Crie migrations quando um sistema de migrations for adotado.
-  - **Não altere schema sem migration** quando migrations existirem.
-- `MovieRepository` (`app/domain/repositories/movie_repository.py`) é uma ABC não implementada — não assuma que persistência já existe.
+---
 
-## Integrações externas e scraper
+## 8. Secrets & Configuration
 
-Documentação em `specs/scraper.md`.
+- Centralized configuration via `pydantic-settings` in `app/core/config.py`.
+- ❌ Do NOT modify `.env` files or production environment secrets.
+- ❌ Do NOT log or expose API keys (`TMDB_API_KEY`, `OMDB_API_KEY`).
 
-- Clients: `TMDBClient`, `OMDBClient`, `LetterBoxdClient` em `app/infrastructure/api_clients/`.
-- **Não altere comportamento de coleta ou normalização** (sanitização de títulos, mapeamento de ratings OMDb, formato de resposta por fonte) sem atualizar `specs/scraper.md`.
-- Letterboxd usa scraping via `letterboxdpy` — mudanças são frágeis; documente o impacto.
-- Variáveis obrigatórias: `TMDB_API_KEY`, `OMDB_API_KEY` (via `.env` ou ambiente).
+---
 
-## Dependências
+## 9. Git Safety Rules
 
-- Gerenciadas em `requirements.txt` via `pip`.
-- **Não adicione dependências sem justificativa** explícita na tarefa.
-- Ao adicionar, pinne a versão seguindo o padrão do arquivo e documente o motivo.
-- Não remova dependências sem verificar uso em `app/` (ex.: `letterboxdpy`, `tmdbv3api`, `requests`).
-- `PyJWT` é importado em `app/core/security.py` mas ausente de `requirements.txt` — corrija apenas se a tarefa envolver autenticação.
-
-## Funcionalidades existentes
-
-- **Não remova funcionalidades existentes** sem solicitação explícita.
-- Código não integrado (`SecurityService`, `AuthService`) ainda faz parte do repositório — não delete silenciosamente; se a tarefa envolver remoção, documente em `specs/`.
-- WebSocket de busca (`/ws/find_movie/`) é o canal usado pelo frontend — preserve o contrato.
-
-## Testes
-
-Estado atual: **não há testes automatizados** (`specs/testing.md`).
-
-- **Crie ou atualize testes quando a tarefa introduzir ou modificar comportamento** verificável.
-- Ao adicionar testes, use `pytest` ou `unittest` com `fastapi.testclient.TestClient` — adicione o framework necessário ao `requirements.txt` se ainda não existir.
-- Atualize `specs/testing.md` ao introduzir infraestrutura de testes.
-- **Execute os testes antes de concluir a tarefa.** Se ainda não houver suite, valide manualmente os endpoints afetados com o servidor local:
-
-  ```bash
-  uvicorn app.main:app --reload
-  ```
-
-  Confirme que a aplicação inicia sem erro de importação e que os endpoints modificados respondem conforme `specs/api.md`.
-
-## Segredos e configuração
-
-- **Não altere `.env`**, secrets, credenciais ou valores de API keys.
-- **Não commite** arquivos `.env` ou chaves.
-- Configuração da aplicação: `app/core/config.py` — novas variáveis de ambiente devem ser documentadas em `specs/deployment.md`.
-- Não modifique `allow_origins` em CORS sem alinhar com o domínio real do frontend.
-
-## Disciplina de mudanças
-
-- **Mantenha mudanças pequenas e focadas** no que a tarefa pede.
-- **Não refatore partes fora do escopo** (renomeações amplas, reorganização de pastas, limpeza de débitos não solicitados).
-- Não altere `requirements.txt`, `specs/` ou configurações de deploy além do necessário para a tarefa.
-- Ao resolver débitos listados em `specs/technical-debt.md`, atualize a spec correspondente.
-- Siga o estilo e convenções do código existente (async nos use cases, retorno de `{"error": ...}` nos clients, `Depends()` nas rotas REST).
-
-## Commits
-
-- **Não crie commits** a menos que o usuário solicite explicitamente.
-
-## Checklist antes de concluir
-
-- [ ] Li e respeitei as `specs/` relevantes
-- [ ] Atualizei `specs/` se mudei API, integrações, persistência, testes ou deploy
-- [ ] Mudança compatível com o frontend (ou breaking change documentado)
-- [ ] Sem alteração em `.env` ou secrets
-- [ ] Dependências novas justificadas e pinadas
-- [ ] Testes criados/atualizados e executados (ou validação manual documentada se não houver suite)
-- [ ] Escopo limitado — sem refatoração extra
+- ❌ NEVER execute `git clean`, `git add`, `git commit`, or `git push` automatically.
+- Keep changes minimal, focused, and verified.

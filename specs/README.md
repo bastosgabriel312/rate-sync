@@ -4,7 +4,7 @@ Documentação do **estado atual** do backend RateSync, baseada exclusivamente n
 
 ## Sobre o projeto
 
-O RateSync é uma API em Python/FastAPI que agrega informações e avaliações de filmes a partir de fontes externas (TMDB, OMDb e Letterboxd). Os dados são consultados **em tempo real** a cada requisição — não há persistência local de filmes ou ratings.
+O RateSync é uma API em Python/FastAPI que agrega informações e avaliações de filmes a partir de fontes externas (Cinemeta, OMDb e Letterboxd). Os dados são consultados **em tempo real** a cada requisição — não há persistência local de filmes ou ratings.
 
 ## Localização do código
 
@@ -49,17 +49,18 @@ rate-sync/
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| `GET` | `/api/v1/ratings/{movie_id}` | Ratings consolidados de TMDB, OMDb e Letterboxd |
-| `GET` | `/api/v1/more_populars` | Filmes populares do TMDB |
+| `GET` | `/api/v1/health` | Health check (status, timestamp, versão) |
+| `GET` | `/api/v1/ratings/{movie_id}` | Ratings consolidados de Cinemeta, OMDb e Letterboxd |
+| `GET` | `/api/v1/more_populars` | Filmes populares da Cinemeta |
 | `GET` | `/api/v1/movie/?movie_title=` | Busca de filmes por título (REST) |
 | `WS` | `/api/v1/ws/find_movie/` | Busca de filmes por título (WebSocket) |
 
-## Variáveis de ambiente obrigatórias
+## Variáveis de ambiente
 
-| Variável | Uso |
-|----------|-----|
-| `TMDB_API_KEY` | Cliente TMDB |
-| `OMDB_API_KEY` | Cliente OMDb |
+| Variável | Uso | Obrigatória |
+|----------|-----|-------------|
+| `OMDB_API_KEY` | Cliente OMDb | Sim |
+| `CINEMETA_BASE_URL` | Base URL da Cinemeta (padrão `https://v3-cinemeta.strem.io`) | Não |
 
 Carregadas via `python-dotenv` e `pydantic-settings` em `app/core/config.py`.
 

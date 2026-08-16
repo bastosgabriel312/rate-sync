@@ -1,5 +1,7 @@
 # app/api/v1/routes.py
 
+from datetime import datetime, timezone
+
 from fastapi import WebSocket, WebSocketDisconnect
 
 from starlette.websockets import WebSocketState
@@ -10,18 +12,18 @@ from app.domain.use_cases.find_movie import FindMovie
 from app.domain.use_cases.get_more_populars import GetMorePopulars
 from app.domain.use_cases.get_movie_ratings import GetMovieRatings
 from app.infrastructure.api_clients.letterboxd_client import LetterBoxdClient
-from app.infrastructure.api_clients.tmdb_client import TMDBClient
+from app.infrastructure.api_clients.cinemeta_client import CinemetaClient
 from app.infrastructure.api_clients.omdb_client import OMDBClient
 
 router = APIRouter()
 
-tmdb_client = TMDBClient()
+cinemeta_client = CinemetaClient()
 omdb_client = OMDBClient()
 letterboxd_client = LetterBoxdClient()
 
-get_movie_ratings_use_case = GetMovieRatings(tmdb_client, omdb_client, letterboxd_client)
-get_more_populars_use_case = GetMorePopulars(tmdb_client)
-find_movie_use_case = FindMovie(tmdb_client)
+get_movie_ratings_use_case = GetMovieRatings(cinemeta_client, omdb_client, letterboxd_client)
+get_more_populars_use_case = GetMorePopulars(cinemeta_client)
+find_movie_use_case = FindMovie(cinemeta_client)
 
 def get_movie_ratings_service() -> GetMovieRatings:
     return get_movie_ratings_use_case
@@ -31,6 +33,14 @@ def get_more_populars_service() -> GetMorePopulars:
 
 def find_movie_service() -> FindMovie:
     return find_movie_use_case
+
+@router.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": "1.0.0",
+    }
 
 @router.get("/ratings/{movie_id}")
 async def get_movie_ratings(movie_id: str, service: GetMovieRatings = Depends(get_movie_ratings_service)):
